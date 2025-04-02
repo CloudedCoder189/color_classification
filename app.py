@@ -20,8 +20,8 @@ app.secret_key = 'BASICALLYICOOCKIE'  # Replace with your secret key
 # Load/Train your Model
 # ------------------------------
 
-# 📂 Dataset Path (adjust the path if needed)
-dataset_path = r"C:\Users\nirmi\Downloads\sdf\ColorClassification"
+# 📂 Dataset Path (adjust the path to be dynamic based on environment)
+dataset_path = os.getenv('DATASET_PATH', r"C:\Users\nirmi\Downloads\sdf\ColorClassification")  # Default to local path for development
 
 # 🚀 Valid Color Labels
 valid_colors = {"Black", "Blue", "Brown", "Green", "Violet", "White", "Orange", "Red", "Yellow"}
@@ -29,39 +29,42 @@ valid_colors = {"Black", "Blue", "Brown", "Green", "Violet", "White", "Orange", 
 X, y = [], []
 
 # 🏷️ Process Images
-for color_folder in os.listdir(dataset_path):
-    # Capitalize the folder name to match valid_colors
-    folder_name = color_folder.lower().capitalize()
-    if folder_name not in valid_colors:
-        continue  # Ignore non-color folders
+try:
+    for color_folder in os.listdir(dataset_path):
+        # Capitalize the folder name to match valid_colors
+        folder_name = color_folder.lower().capitalize()
+        if folder_name not in valid_colors:
+            continue  # Ignore non-color folders
 
-    folder_path = os.path.join(dataset_path, color_folder)
-    print(f"Processing {folder_name}...")
+        folder_path = os.path.join(dataset_path, color_folder)
+        print(f"Processing {folder_name}...")
 
-    for file_name in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file_name)
+        for file_name in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file_name)
 
-        if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
-            continue
+            if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                continue
 
-        img = cv2.imread(file_path)
-        if img is None:
-            continue
+            img = cv2.imread(file_path)
+            if img is None:
+                continue
 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        avg_color = np.mean(img, axis=(0, 1)) / 255.0  # Normalize
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            avg_color = np.mean(img, axis=(0, 1)) / 255.0  # Normalize
 
-        X.append(avg_color)
-        y.append(folder_name)
+            X.append(avg_color)
+            y.append(folder_name)
 
-# Convert to NumPy arrays
-X = np.array(X)
-y = np.array(y)
+    # Convert to NumPy arrays
+    X = np.array(X)
+    y = np.array(y)
 
-print(f"✅ Total images processed: {len(X)}")
+    print(f"✅ Total images processed: {len(X)}")
 
-if len(X) == 0:
-    raise ValueError("❌ No images loaded! Check dataset.")
+    if len(X) == 0:
+        raise ValueError("❌ No images loaded! Check dataset.")
+except Exception as e:
+    print(f"Error processing dataset: {e}")
 
 # 🔢 Encode Labels
 encoder = LabelEncoder()
@@ -76,7 +79,6 @@ model = LogisticRegression(max_iter=2000, solver="saga", class_weight="balanced"
 model.fit(X, y_encoded)
 
 print("✅ Model trained on 100% of the dataset!")
-
 
 # ------------------------------
 # Prediction Function
@@ -134,6 +136,6 @@ def index():
     return render_template('index.html')
 
 
-if __name__ == '__main__':
+if __name__ == '__main__'
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
 
