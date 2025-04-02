@@ -5,3 +5,4 @@ matplotlib==3.10.0
 pillow==11.0.0
 opencv-python-headless==4.11.0.86  # Optimized for servers
 gunicorn==22.0.0  # Required for production deployment
+scikit-learn==1.6.0
