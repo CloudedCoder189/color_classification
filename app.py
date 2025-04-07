@@ -12,38 +12,51 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-# Suppress FutureWarnings
+# Suppress warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 app = Flask(__name__)
-app.secret_key = 'BASICALLYICOOCKIE'  # Replace with your secret key
+app.secret_key = 'BASICALLYICOOCKIE'
 
 # ------------------------------
-# Download Dataset from GitHub
+# Download & Extract Dataset if Needed
 # ------------------------------
-repo_zip_url = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
-zip_path = "color_dataset.zip"
-extracted_folder_name = "color_classification-main/dataset"
+DATASET_URL = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
+DATASET_ZIP = "dataset.zip"
+DATASET_DIR = "ColorClassification"
 
-dataset_path = os.getenv('DATASET_PATH')
-if not dataset_path:
-    if not os.path.exists(extracted_folder_name):
-        print("📥 Downloading dataset from GitHub...")
-        response = requests.get(repo_zip_url)
-        with open(zip_path, "wb") as f:
-            f.write(response.content)
 
-        print("📦 Extracting dataset zip...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall()
+def download_and_extract_dataset():
+    if not os.path.exists(DATASET_DIR):
+        print("\U0001F4E5 Downloading dataset from GitHub...")
+        response = requests.get(DATASET_URL)
+        if response.status_code == 200:
+            with open(DATASET_ZIP, "wb") as f:
+                f.write(response.content)
+            print("\U0001F4E6 Extracting dataset zip...")
+            try:
+                with zipfile.ZipFile(DATASET_ZIP, 'r') as zip_ref:
+                    zip_ref.extractall()
+                os.rename("color_classification-main/dataset", DATASET_DIR)
+                print("\u2705 Dataset extracted!")
+            except zipfile.BadZipFile:
+                print("\u274C Error: The downloaded file is not a valid zip.")
+                raise
+            os.remove(DATASET_ZIP)
+        else:
+            print("\u274C Failed to download dataset. Status code:", response.status_code)
+            raise Exception("Dataset download failed")
+    else:
+        print("\U0001F4C2 Dataset already exists.")
 
-    dataset_path = extracted_folder_name
 
 # ------------------------------
-# Load and Train Model
+# Load/Train Model
 # ------------------------------
+download_and_extract_dataset()
+dataset_path = DATASET_DIR
+
 valid_colors = {"Black", "Blue", "Brown", "Green", "Violet", "White", "Orange", "Red", "Yellow"}
-
 X, y = [], []
 
 try:
@@ -53,18 +66,14 @@ try:
             continue
 
         folder_path = os.path.join(dataset_path, color_folder)
-        print(f"Processing {folder_name}...")
-
         for file_name in os.listdir(folder_path):
             file_path = os.path.join(folder_path, file_name)
-
             if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
                 continue
 
             img = cv2.imread(file_path)
             if img is None:
                 continue
-
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             avg_color = np.mean(img, axis=(0, 1)) / 255.0
 
@@ -73,15 +82,13 @@ try:
 
     X = np.array(X)
     y = np.array(y)
-
-    print(f"✅ Total images processed: {len(X)}")
+    print(f"\u2705 Total images processed: {len(X)}")
 
     if len(X) == 0:
         raise ValueError("❌ No images loaded! Check dataset.")
 except Exception as e:
     print(f"Error processing dataset: {e}")
 
-# Label Encoding and Scaling
 encoder = LabelEncoder()
 y_encoded = encoder.fit_transform(y)
 
@@ -90,8 +97,8 @@ X = scaler.fit_transform(X)
 
 model = LogisticRegression(max_iter=2000, solver="saga", class_weight="balanced")
 model.fit(X, y_encoded)
-
 print("✅ Model trained on 100% of the dataset!")
+
 
 # ------------------------------
 # Prediction Function
@@ -104,17 +111,16 @@ def predict_color_from_image(image):
     predicted_color = encoder.inverse_transform(predicted_label)[0]
     return predicted_color, avg_color
 
+
 # ------------------------------
 # Flask Routes
 # ------------------------------
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        print("Received POST request.")
         if 'image' not in request.files:
             flash("No file part in the request.")
             return redirect(request.url)
-
         file = request.files['image']
         if file.filename == '':
             flash("No file selected.")
@@ -143,4 +149,3 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
-
