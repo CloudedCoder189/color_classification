@@ -23,31 +23,34 @@ app.secret_key = 'BASICALLYICOOCKIE'
 # ------------------------------
 DATASET_URL = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
 DATASET_ZIP = "dataset.zip"
-DATASET_DIR = "ColorClassification"
+DATASET_DIR = "ColorClassification"  # this should match the folder you uploaded
 
 
 def download_and_extract_dataset():
-    if not os.path.exists(DATASET_DIR):
-        print("\U0001F4E5 Downloading dataset from GitHub...")
-        response = requests.get(DATASET_URL)
-        if response.status_code == 200:
-            with open(DATASET_ZIP, "wb") as f:
-                f.write(response.content)
-            print("\U0001F4E6 Extracting dataset zip...")
-            try:
-                with zipfile.ZipFile(DATASET_ZIP, 'r') as zip_ref:
-                    zip_ref.extractall()
-                os.rename("color_classification-main/dataset", DATASET_DIR)
-                print("\u2705 Dataset extracted!")
-            except zipfile.BadZipFile:
-                print("\u274C Error: The downloaded file is not a valid zip.")
-                raise
+    # If the folder already exists, skip re-downloading
+    if os.path.isdir(DATASET_DIR):
+        print("\U0001F4C2 Dataset already exists; skipping download.")
+        return
+
+    print("\U0001F4E5 Downloading dataset from GitHub...")
+    response = requests.get(DATASET_URL)
+    if response.status_code == 200:
+        with open(DATASET_ZIP, "wb") as f:
+            f.write(response.content)
+        print("\U0001F4E6 Extracting dataset zip...")
+        try:
+            with zipfile.ZipFile(DATASET_ZIP, 'r') as zip_ref:
+                zip_ref.extractall()
+            os.rename("color_classification-main/dataset", DATASET_DIR)
+            print("\u2705 Dataset extracted!")
+        except zipfile.BadZipFile:
+            print("\u274C Error: The downloaded file is not a valid zip.")
+            raise
+        finally:
             os.remove(DATASET_ZIP)
-        else:
-            print("\u274C Failed to download dataset. Status code:", response.status_code)
-            raise Exception("Dataset download failed")
     else:
-        print("\U0001F4C2 Dataset already exists.")
+        print("\u274C Failed to download dataset. Status code:", response.status_code)
+        raise Exception("Dataset download failed")
 
 
 # ------------------------------
@@ -67,13 +70,14 @@ try:
 
         folder_path = os.path.join(dataset_path, color_folder)
         for file_name in os.listdir(folder_path):
-            file_path = os.path.join(folder_path, file_name)
             if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
                 continue
 
+            file_path = os.path.join(folder_path, file_name)
             img = cv2.imread(file_path)
             if img is None:
                 continue
+
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             avg_color = np.mean(img, axis=(0, 1)) / 255.0
 
@@ -140,9 +144,16 @@ def index():
 
         pngImage = io.BytesIO()
         FigureCanvas(fig).print_png(pngImage)
-        pngImageB64String = "data:image/png;base64," + base64.b64encode(pngImage.getvalue()).decode('utf8')
+        pngImageB64String = (
+            "data:image/png;base64,"
+            + base64.b64encode(pngImage.getvalue()).decode('utf8')
+        )
 
-        return render_template('index.html', predicted_color=predicted_color, plot_url=pngImageB64String)
+        return render_template(
+            'index.html',
+            predicted_color=predicted_color,
+            plot_url=pngImageB64String
+        )
 
     return render_template('index.html')
 
