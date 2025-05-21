@@ -23,7 +23,7 @@ app.secret_key = 'BASICALLYICOOCKIE'
 # ------------------------------
 DATASET_URL = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
 DATASET_ZIP = "dataset.zip"
-DATASET_DIR = "ColorClassification"  # this should match the folder you uploaded
+DATASET_DIR = "dataset"
 
 
 def download_and_extract_dataset():
