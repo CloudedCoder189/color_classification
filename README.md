@@ -18,70 +18,77 @@ Supported classes:
 - White
 - Yellow
 
-Users can upload an image through the web interface and receive the predicted color along with a visualization of the image's average RGB color.
+Users can upload an image through the web interface and receive the predicted class along with a swatch showing the image's average RGB color.
 
-## How It Works
+## How it works
 
 1. Training images are loaded from category folders in `dataset/`.
 2. Each image is converted from BGR to RGB.
-3. The average RGB value is calculated and normalized.
+3. Its average RGB value is calculated and normalized to `[0, 1]`.
 4. Features are standardized with `StandardScaler`.
-5. A balanced multiclass `LogisticRegression` model is trained.
+5. A balanced multiclass `LogisticRegression` model is trained once when the application starts.
 6. Uploaded images go through the same preprocessing pipeline before prediction.
 
-## Tech Stack
+## Tech stack
 
 - Python
 - Flask
 - OpenCV
 - NumPy
 - scikit-learn
-- Matplotlib
-- HTML/CSS
+- Gunicorn
+- HTML/CSS/JavaScript
 
-## Running Locally
+## Run locally
 
-Install the dependencies:
+```bash
+git clone https://github.com/CloudedCoder189/color_classification.git
+cd color_classification
+python -m venv .venv
+```
+
+Activate the environment and install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Create a local `.env` file:
-
-```text
-SECRET_KEY=replace-with-a-random-secret
-```
-
-Then run:
+Run the application:
 
 ```bash
 python app.py
 ```
 
-The app will start on port `5000` by default.
+The development server uses port `5000` by default.
 
-## Project Structure
+## Project structure
 
 ```text
-color_classification/
+.
 ├── app.py
 ├── dataset/
+├── static/
+│   └── style.css
 ├── templates/
+│   └── index.html
 ├── requirements.txt
 ├── Procfile
 ├── .gitignore
 └── README.md
 ```
 
-## Security
+## Deployment
 
-Secrets are loaded through environment variables. Do not commit `.env` files or production credentials to the repository.
+The included `Procfile` starts the app with Gunicorn and binds to the platform-provided `PORT` environment variable.
 
-## Future Improvements
+## Current limitations
 
-- Separate model training from application startup
-- Save and load a trained model instead of retraining on each launch
-- Add a validation/test split and report model accuracy
-- Improve classification beyond average RGB features
-- Add automated tests and clearer deployment configuration
+The model uses only average RGB values, so it describes the overall color of an image rather than understanding individual objects or regions. The current repository also trains the classifier during application startup rather than loading a separately versioned model artifact.
+
+## Future improvements
+
+- Separate training from web-server startup
+- Save and version a trained model artifact
+- Add a validation/test split and report classification metrics
+- Compare average RGB features with richer color representations such as HSV histograms
+- Add automated tests
