@@ -1,5 +1,7 @@
 __pycache__/
+*.py[cod]
 .env
-*.pyc
-dataset/
-dataset.zip
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
