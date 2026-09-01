@@ -11,7 +11,7 @@ from flask import Flask, request, render_template, redirect, url_for, flash
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -19,35 +19,40 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 app = Flask(__name__)
 
-app.secret_key = os.environ.get("SECRET_KEY", "dev-only-secret")
+secret_key = os.environ.get("SECRET_KEY")
+if not secret_key:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+app.secret_key = secret_key
 
 DATASET_URL = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
 DATASET_ZIP = "dataset.zip"
 DATASET_DIR = "dataset"
 
+
 def download_and_extract_dataset():
     if os.path.isdir(DATASET_DIR):
-        print("\U0001F4C2 Dataset already exists; skipping download.")
+        print("📂 Dataset already exists; skipping download.")
         return
-    print("\U0001F4E5 Downloading dataset from GitHub...")
+    print("📥 Downloading dataset from GitHub...")
     response = requests.get(DATASET_URL)
     if response.status_code == 200:
         with open(DATASET_ZIP, "wb") as f:
             f.write(response.content)
-        print("\U0001F4E6 Extracting dataset zip...")
+        print("📦 Extracting dataset zip...")
         try:
             with zipfile.ZipFile(DATASET_ZIP, 'r') as zip_ref:
                 zip_ref.extractall()
             os.rename("color_classification-main/dataset", DATASET_DIR)
-            print("\u2705 Dataset extracted!")
+            print("✅ Dataset extracted!")
         except zipfile.BadZipFile:
-            print("\u274C Error: The downloaded file is not a valid zip.")
+            print("❌ Error: The downloaded file is not a valid zip.")
             raise
         finally:
             os.remove(DATASET_ZIP)
     else:
-        print("\u274C Failed to download dataset. Status code:", response.status_code)
+        print("❌ Failed to download dataset. Status code:", response.status_code)
         raise Exception("Dataset download failed")
+
 
 download_and_extract_dataset()
 dataset_path = DATASET_DIR
@@ -73,7 +78,7 @@ try:
             y.append(folder_name)
     X = np.array(X)
     y = np.array(y)
-    print(f"\u2705 Total images processed: {len(X)}")
+    print(f"✅ Total images processed: {len(X)}")
     if len(X) == 0:
         raise ValueError("❌ No images loaded! Check dataset.")
 except Exception as e:
@@ -87,6 +92,7 @@ model = LogisticRegression(max_iter=2000, solver="saga", class_weight="balanced"
 model.fit(X, y_encoded)
 print("✅ Model trained on 100% of the dataset!")
 
+
 def predict_color_from_image(image):
     img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     avg_color = np.mean(img, axis=(0, 1)).reshape(1, -1) / 255.0
@@ -94,6 +100,7 @@ def predict_color_from_image(image):
     predicted_label = model.predict(avg_color_scaled)
     predicted_color = encoder.inverse_transform(predicted_label)[0]
     return predicted_color, avg_color
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -126,6 +133,7 @@ def index():
             plot_url=pngImageB64String
         )
     return render_template('index.html')
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
