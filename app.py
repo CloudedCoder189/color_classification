@@ -1,139 +1,133 @@
 import os
+from pathlib import Path
+
 import cv2
-import io
-import zipfile
-import base64
-import requests
-import warnings
 import numpy as np
-import matplotlib.pyplot as plt
-from flask import Flask, request, render_template, redirect, url_for, flash
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from flask import Flask, render_template, request
 from sklearn.linear_model import LogisticRegression
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from dotenv import load_dotenv
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-load_dotenv()
-
-warnings.simplefilter(action='ignore', category=FutureWarning)
+BASE_DIR = Path(__file__).resolve().parent
+DATASET_DIR = BASE_DIR / "dataset"
+VALID_COLORS = {
+    "Black",
+    "Blue",
+    "Brown",
+    "Green",
+    "Orange",
+    "Red",
+    "Violet",
+    "White",
+    "Yellow",
+}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 app = Flask(__name__)
-
-secret_key = os.environ.get("SECRET_KEY")
-if not secret_key:
-    raise RuntimeError("SECRET_KEY environment variable is required")
-app.secret_key = secret_key
-
-DATASET_URL = "https://github.com/CloudedCoder189/color_classification/archive/refs/heads/main.zip"
-DATASET_ZIP = "dataset.zip"
-DATASET_DIR = "dataset"
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
 
-def download_and_extract_dataset():
-    if os.path.isdir(DATASET_DIR):
-        print("📂 Dataset already exists; skipping download.")
-        return
-    print("📥 Downloading dataset from GitHub...")
-    response = requests.get(DATASET_URL)
-    if response.status_code == 200:
-        with open(DATASET_ZIP, "wb") as f:
-            f.write(response.content)
-        print("📦 Extracting dataset zip...")
-        try:
-            with zipfile.ZipFile(DATASET_ZIP, 'r') as zip_ref:
-                zip_ref.extractall()
-            os.rename("color_classification-main/dataset", DATASET_DIR)
-            print("✅ Dataset extracted!")
-        except zipfile.BadZipFile:
-            print("❌ Error: The downloaded file is not a valid zip.")
-            raise
-        finally:
-            os.remove(DATASET_ZIP)
-    else:
-        print("❌ Failed to download dataset. Status code:", response.status_code)
-        raise Exception("Dataset download failed")
+def average_rgb(image: np.ndarray) -> np.ndarray:
+    """Return the image's average RGB value as three floats in [0, 255]."""
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return np.mean(rgb_image, axis=(0, 1))
 
 
-download_and_extract_dataset()
-dataset_path = DATASET_DIR
-valid_colors = {"Black", "Blue", "Brown", "Green", "Violet", "White", "Orange", "Red", "Yellow"}
-X, y = [], []
+def load_training_data() -> tuple[np.ndarray, np.ndarray]:
+    """Load average-color features and labels from the committed dataset."""
+    if not DATASET_DIR.is_dir():
+        raise RuntimeError(f"Dataset directory not found: {DATASET_DIR}")
 
-try:
-    for color_folder in os.listdir(dataset_path):
-        folder_name = color_folder.lower().capitalize()
-        if folder_name not in valid_colors:
+    features: list[np.ndarray] = []
+    labels: list[str] = []
+
+    for color_dir in sorted(DATASET_DIR.iterdir()):
+        if not color_dir.is_dir():
             continue
-        folder_path = os.path.join(dataset_path, color_folder)
-        for file_name in os.listdir(folder_path):
-            if not file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+
+        label = color_dir.name.strip().capitalize()
+        if label not in VALID_COLORS:
+            continue
+
+        for image_path in sorted(color_dir.iterdir()):
+            if image_path.suffix.lower() not in IMAGE_EXTENSIONS:
                 continue
-            file_path = os.path.join(folder_path, file_name)
-            img = cv2.imread(file_path)
-            if img is None:
+
+            image = cv2.imread(str(image_path))
+            if image is None:
                 continue
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            avg_color = np.mean(img, axis=(0, 1)) / 255.0
-            X.append(avg_color)
-            y.append(folder_name)
-    X = np.array(X)
-    y = np.array(y)
-    print(f"✅ Total images processed: {len(X)}")
-    if len(X) == 0:
-        raise ValueError("❌ No images loaded! Check dataset.")
-except Exception as e:
-    print(f"Error processing dataset: {e}")
 
-encoder = LabelEncoder()
-y_encoded = encoder.fit_transform(y)
-scaler = StandardScaler()
-X = scaler.fit_transform(X)
-model = LogisticRegression(max_iter=2000, solver="saga", class_weight="balanced")
-model.fit(X, y_encoded)
-print("✅ Model trained on 100% of the dataset!")
+            features.append(average_rgb(image) / 255.0)
+            labels.append(label)
+
+    if not features:
+        raise RuntimeError("No valid training images were found in the dataset.")
+
+    return np.asarray(features), np.asarray(labels)
 
 
-def predict_color_from_image(image):
-    img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    avg_color = np.mean(img, axis=(0, 1)).reshape(1, -1) / 255.0
-    avg_color_scaled = scaler.transform(avg_color)
-    predicted_label = model.predict(avg_color_scaled)
-    predicted_color = encoder.inverse_transform(predicted_label)[0]
-    return predicted_color, avg_color
+def train_model() -> tuple[LogisticRegression, StandardScaler, LabelEncoder]:
+    """Train the classifier once when the application starts."""
+    features, labels = load_training_data()
+
+    encoder = LabelEncoder()
+    encoded_labels = encoder.fit_transform(labels)
+
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(features)
+
+    classifier = LogisticRegression(
+        max_iter=2000,
+        solver="saga",
+        class_weight="balanced",
+        random_state=42,
+    )
+    classifier.fit(scaled_features, encoded_labels)
+
+    print(f"Loaded {len(features)} training images across {len(encoder.classes_)} classes.")
+    return classifier, scaler, encoder
 
 
-@app.route('/', methods=['GET', 'POST'])
+model, scaler, encoder = train_model()
+
+
+def predict_color(image: np.ndarray) -> tuple[str, tuple[int, int, int]]:
+    """Predict a color label and return the image's average RGB preview."""
+    rgb = average_rgb(image)
+    scaled_features = scaler.transform((rgb / 255.0).reshape(1, -1))
+    encoded_prediction = model.predict(scaled_features)
+    predicted_color = encoder.inverse_transform(encoded_prediction)[0]
+    preview_rgb = tuple(int(round(channel)) for channel in rgb)
+    return predicted_color, preview_rgb
+
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        if 'image' not in request.files:
-            flash("No file part in the request.")
-            return redirect(request.url)
-        file = request.files['image']
-        if file.filename == '':
-            flash("No file selected.")
-            return redirect(request.url)
-        file_bytes = np.frombuffer(file.read(), np.uint8)
-        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        if image is None:
-            flash("Invalid image file. Please upload a valid image.")
-            return redirect(request.url)
-        predicted_color, avg_color = predict_color_from_image(image)
-        fig, ax = plt.subplots(figsize=(2, 2))
-        ax.imshow([[avg_color[0]]])
-        ax.axis("off")
-        pngImage = io.BytesIO()
-        FigureCanvas(fig).print_png(pngImage)
-        pngImageB64String = (
-            "data:image/png;base64,"
-            + base64.b64encode(pngImage.getvalue()).decode('utf8')
-        )
-        return render_template(
-            'index.html',
-            predicted_color=predicted_color,
-            plot_url=pngImageB64String
-        )
-    return render_template('index.html')
+    if request.method == "GET":
+        return render_template("index.html")
+
+    uploaded_file = request.files.get("image")
+    if uploaded_file is None or not uploaded_file.filename:
+        return render_template("index.html", error="Please choose an image to upload."), 400
+
+    file_bytes = np.frombuffer(uploaded_file.read(), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    if image is None:
+        return render_template("index.html", error="The uploaded file is not a valid image."), 400
+
+    predicted_color, preview_rgb = predict_color(image)
+    preview_css = f"rgb({preview_rgb[0]}, {preview_rgb[1]}, {preview_rgb[2]})"
+
+    return render_template(
+        "index.html",
+        predicted_color=predicted_color,
+        preview_color=preview_css,
+    )
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+@app.errorhandler(413)
+def file_too_large(_error):
+    return render_template("index.html", error="Image is too large. Maximum upload size is 8 MB."), 413
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
