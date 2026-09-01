@@ -27,13 +27,11 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
 
 def average_rgb(image: np.ndarray) -> np.ndarray:
-    """Return the image's average RGB value as three floats in [0, 255]."""
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     return np.mean(rgb_image, axis=(0, 1))
 
 
 def load_training_data() -> tuple[np.ndarray, np.ndarray]:
-    """Load average-color features and labels from the committed dataset."""
     if not DATASET_DIR.is_dir():
         raise RuntimeError(f"Dataset directory not found: {DATASET_DIR}")
 
@@ -66,7 +64,6 @@ def load_training_data() -> tuple[np.ndarray, np.ndarray]:
 
 
 def train_model() -> tuple[LogisticRegression, StandardScaler, LabelEncoder]:
-    """Train the classifier once when the application starts."""
     features, labels = load_training_data()
 
     encoder = LabelEncoder()
@@ -91,7 +88,6 @@ model, scaler, encoder = train_model()
 
 
 def predict_color(image: np.ndarray) -> tuple[str, tuple[int, int, int]]:
-    """Predict a color label and return the image's average RGB preview."""
     rgb = average_rgb(image)
     scaled_features = scaler.transform((rgb / 255.0).reshape(1, -1))
     encoded_prediction = model.predict(scaled_features)
